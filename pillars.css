@@ -628,3 +628,7 @@ body.theme-advanced .pillars-arrow-btn:hover {
 body.theme-advanced .pillars-note {
   color: #9da0d1;
 }
+
+.page {
+  border: none !important;
+}
