@@ -426,6 +426,44 @@ body.theme-intermediate .page {
   background: transparent;
 }
 
+/* Enhanced card styling for Intermediate theme */
+body.theme-intermediate .pillar-card {
+  background: rgba(255, 255, 255, 0.65);
+  backdrop-filter: blur(22px) saturate(190%);
+  -webkit-backdrop-filter: blur(22px) saturate(190%);
+  border: 1px solid rgba(122, 115, 213, 0.5);
+  box-shadow:
+    0 10px 30px rgba(122, 115, 213, 0.15),
+    inset 0 0 30px rgba(255, 255, 255, 0.4);
+}
+
+body.theme-intermediate .pillar-card:hover {
+  background: rgba(255, 255, 255, 0.85);
+  border-color: rgba(154, 143, 255, 0.8);
+  box-shadow:
+    0 18px 50px rgba(122, 115, 213, 0.25),
+    inset 0 0 36px rgba(255, 255, 255, 0.5);
+}
+
+body.theme-intermediate .pillar-chip {
+  background: rgba(122, 115, 213, 0.1);
+  border: 1px solid rgba(122, 115, 213, 0.4);
+  color: var(--muted);
+}
+
+body.theme-intermediate .pillar-title {
+  color: var(--headline);
+}
+
+body.theme-intermediate .pillar-subtitle {
+  color: var(--muted);
+}
+
+body.theme-intermediate .pillar-body,
+body.theme-intermediate .pillar-list li {
+  color: var(--text);
+}
+
 
 /* PRE-ADVANCED: Twilight transition to Solar */
 body.theme-pre-advanced {
