@@ -399,21 +399,26 @@
     color: var(--muted);
   }
   
-/* INTERMEDIATE: Light with subtle depth */
+/* INTERMEDIATE: Color progression from Initiate (White) to Pre-Advanced (Dark Twilight) */
 body.theme-intermediate {
-  --bg: #f7f8fc;
-  --bg-soft: #f0f1f8;
-  --accent: #6c6dd8;
-  --accent-strong: #8284f6;
-  --headline: #1e1e2f;
-  --text: #33344a;
-  --muted: #686a8c;
+  --bg: #8a8ab8;
+  --bg-soft: #7d7daf;
+  --accent: #7a73d5;
+  --accent-strong: #9a8fff;
+  --headline: #3a3a52;
+  --text: #5a5a78;
+  --muted: #7a7a9a;
 
   background: linear-gradient(
     to bottom,
     #ffffff 0%,
-    #f2f4ff 40%,
-    #eaecfa 100%
+    #f5f3fb 15%,
+    #e8e5f5 30%,
+    #d5cce8 45%,
+    #b8afd1 60%,
+    #8a8ab8 75%,
+    #4a4a7a 90%,
+    #0c0f27 100%
   );
 }
 
@@ -627,8 +632,4 @@ body.theme-advanced .pillars-arrow-btn:hover {
 /* Note text */
 body.theme-advanced .pillars-note {
   color: #9da0d1;
-}
-
-.page {
-  border: none !important;
 }
