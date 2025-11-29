@@ -516,6 +516,10 @@ body.theme-advanced .pillar-card {
     opacity 200ms ease;
 }
 
+body.theme-pre-advanced #pillars-layer-label {
+  color: #4b5563;
+}
+
 /* Glass sheen layer */
 body.theme-advanced .pillar-card::before {
   content: "";
