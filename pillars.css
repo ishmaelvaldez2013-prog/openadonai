@@ -451,8 +451,15 @@ body.theme-pre-advanced .pillar-card {
        transparent 60%
     ),
     rgba(12,15,39,0.92);
-  border: 1px solid rgba(143,129,255,0.35);
+    border: none;
 }
+
+body.theme-pre-advanced #pillars-layer-label {
+  color: #4b5563;
+}
+
+
+
 /* SOLAR DARK THEME when Advanced tier is active */
 /* ADVANCED: Full Solar starfield */
 body.theme-advanced {
@@ -516,9 +523,6 @@ body.theme-advanced .pillar-card {
     opacity 200ms ease;
 }
 
-body.theme-pre-advanced #pillars-layer-label {
-  color: #4b5563;
-}
 
 /* Glass sheen layer */
 body.theme-advanced .pillar-card::before {
