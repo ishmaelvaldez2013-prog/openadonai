@@ -1,0 +1,622 @@
+
+  :root {
+    --bg: #ffffff;
+    --bg-soft: #f5f5fa;
+    --accent: #9e7bff;
+    --accent-strong: #7b5dff;
+    --headline: #111322;
+    --text: #2d3045;
+    --muted: #7a7fa6;
+    --border-subtle: rgba(15, 23, 42, 0.08);
+    --radius-lg: 18px;
+    --radius-pill: 999px;
+    --max-width: 1120px;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  html,
+  body {
+    margin: 0;
+    padding: 0;
+    background: #ffffff;
+    color: var(--text);
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text",
+      "Segoe UI", sans-serif;
+    line-height: 1.6;
+  }
+
+  body {
+    display: flex;
+    justify-content: center;
+  }
+
+  .page {
+    min-height: 100vh;
+    padding: 40px 20px 60px;
+    width: 100%;
+    max-width: 1400px;
+    display: flex;
+    justify-content: center;
+    background: #ffffff;
+  }
+
+  .pillars-shell {
+    width: 100%;
+    max-width: var(--max-width);
+    margin: 0 auto;
+  }
+
+  /* Header */
+
+  .pillars-header {
+    margin-bottom: 24px;
+    text-align: left;
+  }
+
+  .pillars-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    padding: 7px 16px;
+    border-radius: var(--radius-pill);
+    background: rgba(255, 255, 255, 0.85);
+    border: 1px solid rgba(60, 60, 80, 0.25);
+    backdrop-filter: blur(14px) saturate(180%);
+    -webkit-backdrop-filter: blur(14px) saturate(180%);
+    color: var(--headline);
+    font-size: 12px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+    font-weight: 600;
+  }
+
+  .pillars-pill-dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 999px;
+    background: radial-gradient(circle at 30% 30%, #fff, var(--accent));
+    box-shadow: 0 0 10px rgba(158, 123, 255, 0.8);
+  }
+
+  .pillars-title {
+    margin: 0 0 6px;
+    font-size: 30px;
+    letter-spacing: 0.02em;
+    color: var(--headline);
+  }
+
+  @media (min-width: 768px) {
+    .pillars-title {
+      font-size: 36px;
+    }
+  }
+
+  .pillars-subtitle {
+    margin: 0;
+    font-size: 15px;
+    color: var(--muted);
+    max-width: 640px;
+  }
+
+  /* Carousel top bar (label + arrows) */
+
+  .pillars-carousel-header {
+    margin-top: 24px;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .pillars-carousel-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 12px;
+    border-radius: var(--radius-pill);
+    background: #f3f4fb;
+    border: 1px solid rgba(148, 163, 184, 0.6);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: #4b5563;
+    font-weight: 600;
+  }
+
+  .pillars-carousel-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 999px;
+    background: radial-gradient(circle at 30% 30%, #fff, var(--accent));
+    box-shadow: 0 0 7px rgba(158, 123, 255, 0.9);
+  }
+
+  .pillars-carousel-arrows {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .pillars-arrow-btn {
+    border-radius: 999px;
+    border: 1px solid rgba(148, 163, 184, 0.8);
+    background: linear-gradient(
+      145deg,
+      rgba(248, 250, 252, 0.98),
+      rgba(229, 231, 235, 0.98)
+    );
+    width: 30px;
+    height: 30px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 14px;
+    color: #4b5563;
+    transition:
+      background 160ms ease,
+      border-color 160ms ease,
+      box-shadow 160ms ease,
+      transform 140ms ease;
+  }
+
+  .pillars-arrow-btn:hover {
+    background: #ffffff;
+    border-color: rgba(158, 123, 255, 0.9);
+    box-shadow: 0 6px 14px rgba(15, 23, 42, 0.16);
+    transform: translateY(-1px);
+    color: #7b5dff;
+  }
+
+  /* Panels wrapper */
+
+  .pillars-panels {
+    margin-top: 8px;
+  }
+
+  /* Pillar grid */
+
+  .pillar-grid {
+    margin-top: 24px;
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 18px;
+  }
+
+  @media (min-width: 768px) {
+    .pillar-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  @media (min-width: 1140px) {
+    .pillar-grid {
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 16px;
+    }
+  }
+
+  /* Panels as carousel slides */
+
+  .pillars-panel {
+    display: none;
+  }
+
+  .pillars-panel.is-active {
+    display: grid;
+  }
+
+  .pillar-card-link {
+    text-decoration: none;
+    color: inherit;
+  }
+
+  .pillar-card {
+    height: 100%;
+    border-radius: 22px;
+    padding: 18px 18px 20px;
+    background: rgba(255, 255, 255, 0.78);
+    backdrop-filter: blur(22px) saturate(190%);
+    -webkit-backdrop-filter: blur(22px) saturate(190%);
+    border: 1px solid rgba(180, 186, 210, 0.8);
+    box-shadow:
+      0 10px 30px rgba(15, 23, 42, 0.12),
+      inset 0 0 30px rgba(255, 255, 255, 0.3);
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    overflow: hidden;
+    transition:
+      transform 220ms cubic-bezier(0.16, 1, 0.3, 1),
+      box-shadow 220ms cubic-bezier(0.16, 1, 0.3, 1),
+      border-color 220ms ease,
+      background 220ms ease,
+      opacity 200ms ease;
+  }
+
+  .pillar-card::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: linear-gradient(
+      145deg,
+      rgba(255, 255, 255, 0.35) 0%,
+      rgba(255, 255, 255, 0.05) 45%,
+      rgba(158, 123, 255, 0.06) 100%
+    );
+    mix-blend-mode: screen;
+    pointer-events: none;
+    opacity: 0.9;
+    z-index: 0;
+  }
+
+  .pillar-card::after {
+    content: "";
+    position: absolute;
+    inset: -1px;
+    border-radius: inherit;
+    background: linear-gradient(
+      145deg,
+      rgba(158, 123, 255, 0.45),
+      rgba(255, 255, 255, 0.15),
+      rgba(158, 123, 255, 0.45)
+    );
+    opacity: 0;
+    transition: opacity 250ms ease-out;
+    z-index: 0;
+  }
+
+  .pillar-card:hover {
+    transform: translateY(-6px) scale(1.02);
+    box-shadow:
+      0 18px 50px rgba(15, 23, 42, 0.22),
+      inset 0 0 36px rgba(255, 255, 255, 0.38);
+    border-color: rgba(158, 123, 255, 0.9);
+    background: rgba(255, 255, 255, 0.98);
+  }
+
+  .pillar-card:hover::before {
+    opacity: 1;
+    background: linear-gradient(
+      145deg,
+      rgba(255, 255, 255, 0.6) 0%,
+      rgba(255, 255, 255, 0.15) 45%,
+      rgba(158, 123, 255, 0.18) 100%
+    );
+  }
+
+  .pillar-card:hover::after {
+    opacity: 0.4;
+  }
+
+  .pillar-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: rgba(15, 23, 42, 0.04);
+    border: 1px solid rgba(148, 163, 184, 0.45);
+    font-size: 11px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 8px;
+    position: relative;
+    z-index: 1;
+  }
+
+  .pillar-chip-badge {
+    width: 7px;
+    height: 7px;
+    border-radius: 999px;
+    background: radial-gradient(circle at 30% 30%, #fff, var(--accent));
+  }
+
+  .pillar-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--headline);
+    margin: 0 0 6px;
+    position: relative;
+    z-index: 1;
+  }
+
+  .pillar-subtitle {
+    font-size: 13px;
+    color: var(--muted);
+    margin: 0 0 10px;
+    position: relative;
+    z-index: 1;
+  }
+
+  .pillar-body {
+    font-size: 13px;
+    color: var(--text);
+    margin: 0 0 10px;
+    position: relative;
+    z-index: 1;
+  }
+
+  .pillar-list {
+    list-style: none;
+    padding: 0;
+    margin: 0 0 12px;
+    font-size: 12px;
+    position: relative;
+    z-index: 1;
+  }
+
+  .pillar-list li {
+    margin-bottom: 4px;
+    padding-left: 16px;
+    position: relative;
+    color: var(--text);
+  }
+
+  .pillar-list li::before {
+    content: "•";
+    position: absolute;
+    left: 4px;
+    top: 0;
+    color: var(--accent);
+  }
+
+  .pillar-footer {
+    margin-top: auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 12px;
+    color: var(--muted);
+    position: relative;
+    z-index: 1;
+  }
+
+  .pillar-cta {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--accent-strong);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .pillar-cta-arrow {
+    font-size: 14px;
+    transform: translateY(1px);
+  }
+
+  .pillars-note {
+    margin-top: 20px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  
+/* INTERMEDIATE: Light with subtle depth */
+body.theme-intermediate {
+  --bg: #f7f8fc;
+  --bg-soft: #f0f1f8;
+  --accent: #6c6dd8;
+  --accent-strong: #8284f6;
+  --headline: #1e1e2f;
+  --text: #33344a;
+  --muted: #686a8c;
+
+  background: linear-gradient(
+    to bottom,
+    #ffffff 0%,
+    #f2f4ff 40%,
+    #eaecfa 100%
+  );
+}
+
+body.theme-intermediate .page {
+  background: transparent;
+}
+
+
+/* PRE-ADVANCED: Twilight transition to Solar */
+body.theme-pre-advanced {
+  --bg: #0c0f27;
+  --bg-soft: #111531;
+  --accent: #8f81ff;
+  --accent-strong: #b6a2ff;
+  --headline: #e8e9ff;
+  --text: #cdd0f6;
+  --muted: #9aa0d4;
+
+  background: radial-gradient(
+    circle at top,
+    #1a2148 0%,
+    #0c0f27 60%
+  );
+}
+
+body.theme-pre-advanced .page {
+  background: transparent;
+}
+
+/* Slightly darker glass cards but not full-Solar */
+body.theme-pre-advanced .pillar-card {
+  background:
+    radial-gradient(circle at top left,
+       rgba(143,129,255,0.14),
+       transparent 60%
+    ),
+    rgba(12,15,39,0.92);
+  border: 1px solid rgba(143,129,255,0.35);
+}
+/* SOLAR DARK THEME when Advanced tier is active */
+/* ADVANCED: Full Solar starfield */
+body.theme-advanced {
+  --bg: #050816;
+  --bg-soft: #070b1f;
+  --accent: #9e7bff;
+  --accent-strong: #cda6ff;
+  --headline: #f5f5ff;
+  --text: #c8c9f0;
+  --muted: #9da0d1;
+
+  background: radial-gradient(circle at top, #141b3a 0, #050816 55%);
+}
+
+body.theme-advanced .page {
+  background: transparent;
+}
+
+/* Header pill + label refinements */
+body.theme-advanced .pillars-pill {
+  background: rgba(8, 11, 32, 0.9);
+  border: 1px solid rgba(158, 123, 255, 0.55);
+  color: var(--headline);
+}
+
+body.theme-advanced .pillars-carousel-label {
+  background: rgba(8, 11, 32, 0.9);
+  border: 1px solid rgba(148, 163, 184, 0.8);
+  color: #e5e7eb;
+}
+
+/* GLASS PILLAR CARD + HOVER ANIMATION — ADVANCED (Solar dark theme) */
+body.theme-advanced .pillar-card {
+  height: 100%;
+  border-radius: 22px;
+  padding: 18px 18px 20px;
+
+  background:
+    radial-gradient(circle at top left,
+      rgba(158, 123, 255, 0.2),
+      transparent 55%
+    ),
+    rgba(6, 10, 32, 0.96);
+  backdrop-filter: blur(24px) saturate(190%);
+  -webkit-backdrop-filter: blur(24px) saturate(190%);
+  border: 1px solid rgba(158, 123, 255, 0.6);
+  box-shadow:
+    0 18px 50px rgba(0, 0, 0, 0.65),
+    inset 0 0 28px rgba(0, 0, 0, 0.55);
+
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow: hidden;
+
+  transition:
+    transform 220ms cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 220ms cubic-bezier(0.16, 1, 0.3, 1),
+    border-color 220ms ease,
+    background 220ms ease,
+    opacity 200ms ease;
+}
+
+/* Glass sheen layer */
+body.theme-advanced .pillar-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(
+    145deg,
+    rgba(255, 255, 255, 0.08) 0%,
+    rgba(255, 255, 255, 0.02) 45%,
+    rgba(158, 123, 255, 0.18) 100%
+  );
+  mix-blend-mode: screen;
+  pointer-events: none;
+  opacity: 0.85;
+  z-index: 0;
+}
+
+/* Glow edge layer */
+body.theme-advanced .pillar-card::after {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  background: radial-gradient(
+    circle at top,
+    rgba(205, 166, 255, 0.7),
+    rgba(158, 123, 255, 0.15),
+    transparent 70%
+  );
+  opacity: 0;
+  transition: opacity 250ms ease-out;
+  z-index: 0;
+}
+
+/* Hover state */
+body.theme-advanced .pillar-card:hover {
+  transform: translateY(-6px) scale(1.02);
+  box-shadow:
+    0 26px 65px rgba(0, 0, 0, 0.9),
+    inset 0 0 40px rgba(0, 0, 0, 0.6);
+  border-color: rgba(205, 166, 255, 0.95);
+  background:
+    radial-gradient(circle at top left,
+      rgba(205, 166, 255, 0.28),
+      transparent 55%
+    ),
+    rgba(7, 11, 36, 0.98);
+}
+
+body.theme-advanced .pillar-card:hover::before {
+  opacity: 1;
+  background: linear-gradient(
+    145deg,
+    rgba(255, 255, 255, 0.18) 0%,
+    rgba(255, 255, 255, 0.04) 45%,
+    rgba(205, 166, 255, 0.28) 100%
+  );
+}
+
+body.theme-advanced .pillar-card:hover::after {
+  opacity: 0.6;
+}
+
+/* Chip and text colors ride on the new variables, but keep the dark-glass chip bg */
+body.theme-advanced .pillar-chip {
+  background: rgba(5, 8, 24, 0.9);
+  border: 1px solid rgba(205, 213, 255, 0.5);
+  color: var(--muted);
+}
+
+body.theme-advanced .pillar-chip-badge {
+  background: radial-gradient(circle at 30% 30%, #fff, var(--accent));
+  box-shadow: 0 0 8px rgba(158, 123, 255, 0.9);
+}
+
+body.theme-advanced .pillar-title {
+  color: var(--headline);
+}
+
+body.theme-advanced .pillar-subtitle {
+  color: var(--muted);
+}
+
+body.theme-advanced .pillar-body,
+body.theme-advanced .pillar-list li {
+  color: var(--text);
+}
+
+/* Arrows slightly brighter in dark mode */
+body.theme-advanced .pillars-arrow-btn {
+  background: radial-gradient(circle at 30% 30%, #111827, #020617);
+  border-color: rgba(148, 163, 184, 0.9);
+  color: #e5e7eb;
+}
+
+body.theme-advanced .pillars-arrow-btn:hover {
+  color: #c4b5fd;
+}
+
+/* Note text */
+body.theme-advanced .pillars-note {
+  color: #9da0d1;
+}
