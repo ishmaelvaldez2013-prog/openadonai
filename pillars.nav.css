@@ -159,3 +159,41 @@
   transform: translateY(-1px);
   box-shadow: 0 10px 26px rgba(0, 0, 0, 0.7);
 }
+
+/* THEME OVERRIDES — Use body theme colors for nav */
+
+body.theme-intermediate .tier-tab {
+  color: #111322;
+}
+
+body.theme-intermediate .tier-tab.active {
+  color: #111322;
+}
+
+body.theme-intermediate .chapter-pill {
+  color: #111322;
+}
+
+body.theme-pre-advanced .tier-tab {
+  color: var(--headline);
+}
+
+body.theme-pre-advanced .tier-tab.active {
+  color: var(--headline);
+}
+
+body.theme-pre-advanced .chapter-pill {
+  color: var(--headline);
+}
+
+body.theme-advanced .tier-tab {
+  color: var(--headline);
+}
+
+body.theme-advanced .tier-tab.active {
+  color: var(--headline);
+}
+
+body.theme-advanced .chapter-pill {
+  color: var(--headline);
+}
