@@ -94,32 +94,3 @@
     detectTierFromUrl,
   };
 })();
- (function () {
-    const tabs = document.querySelectorAll(".tier-tab");
-    const rows = document.querySelectorAll(".chapters-row");
-
-    const activeTier = document.body.getAttribute("data-tier-active");
-
-    if (activeTier) {
-      tabs.forEach((t) => {
-        t.classList.toggle("active", t.getAttribute("data-tier") === activeTier);
-      });
-
-      rows.forEach((r) => {
-        r.classList.toggle("active", r.getAttribute("data-tier") === activeTier);
-      });
-    }
-
-    tabs.forEach((tab) => {
-      tab.addEventListener("click", () => {
-        const tier = tab.getAttribute("data-tier");
-
-        tabs.forEach((t) => t.classList.remove("active"));
-        tab.classList.add("active");
-
-        rows.forEach((row) => {
-          row.classList.toggle("active", row.getAttribute("data-tier") === tier);
-        });
-      });
-    });
-  })();
