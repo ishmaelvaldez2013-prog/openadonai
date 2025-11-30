@@ -164,7 +164,8 @@
 
 body.theme-intermediate {
   --headline: #f5f5ff;
-  --text: #c8c9f0;
+  --text: #f5f5ff;
+  --muted: #f5f5ff;
 }
 
 body.theme-intermediate .foundations-nav {
@@ -175,6 +176,7 @@ body.theme-intermediate .foundations-nav {
     rgba(138, 138, 184, 0.25) 100%
   );
   border: 1px solid rgba(122, 115, 213, 0.5);
+  color: #f5f5ff;
 }
 
 body.theme-intermediate .tier-tab {
@@ -197,10 +199,24 @@ body.theme-intermediate .tier-tab.active {
   border: 1px solid rgba(122, 115, 213, 0.7);
 }
 
+body.theme-intermediate .tier-tab-dot {
+  background: radial-gradient(circle at 30% 30%, #fff, rgba(122, 115, 213, 1));
+  box-shadow: 0 0 7px rgba(122, 115, 213, 0.9);
+}
+
+body.theme-intermediate .tier-tab.active .tier-tab-dot {
+  background: radial-gradient(circle at 30% 30%, #fff, #7a73d5);
+  box-shadow: 0 0 10px rgba(122, 115, 213, 0.95);
+}
+
 body.theme-intermediate .chapter-pill {
   color: #f5f5ff;
   background: rgba(122, 115, 213, 0.15);
   border: 1px solid rgba(122, 115, 213, 0.4);
+}
+
+body.theme-intermediate .chapter-pill-index {
+  color: #f5f5ff;
 }
 
 body.theme-intermediate .chapter-pill:hover {
