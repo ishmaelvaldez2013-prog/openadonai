@@ -149,6 +149,16 @@
     });
   });
 
+  // Listen for tierchange events from nav (pillars.nav.js)
+  window.addEventListener("tierchange", (e) => {
+    const tier = e.detail.tier;
+    const tierIndex = tiers.indexOf(tier);
+    if (tierIndex !== -1) {
+      index = tierIndex;
+      updateView();
+    }
+  });
+
   // Initial state
   updateView();
 })();
