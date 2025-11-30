@@ -405,8 +405,8 @@ body.theme-intermediate {
   --bg-soft: #7d7daf;
   --accent: #7a73d5;
   --accent-strong: #9a8fff;
-  --headline: #3a3a52;
-  --text: #5a5a78;
+  --headline: #111322;
+  --text: #2d3045;
   --muted: #7a7a9a;
 
   background: linear-gradient(
