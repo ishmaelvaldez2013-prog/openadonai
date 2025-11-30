@@ -1,17 +1,42 @@
 
-  :root {
-    --bg: #ffffff;
-    --bg-soft: #f5f5fa;
-    --accent: #9e7bff;
-    --accent-strong: #7b5dff;
-    --headline: #111322;
-    --text: #2d3045;
-    --muted: #4b5563;
-    --border-subtle: rgba(15, 23, 42, 0.08);
-    --radius-lg: 18px;
-    --radius-pill: 999px;
-    --max-width: 1120px;
-  }
+:root {
+  --bg: #ffffff;
+  --bg-soft: #f5f5fa;
+  --accent: #9e7bff;
+  --accent-strong: #7b5dff;
+  --headline: #111322;
+  --text: #181926; /* <- Darker text for Initiate */
+  --muted: #4b5563;
+  --border-subtle: rgba(15, 23, 42, 0.08);
+  --radius-lg: 18px;
+  --radius-pill: 999px;
+  --max-width: 1120px;
+}
+
+/* ... other styles ... */
+
+/* INTERMEDIATE: Color progression from Initiate (White) to Pre-Advanced (Dark Twilight) */
+body.theme-intermediate {
+  --bg: #8a8ab8;
+  --bg-soft: #7d7daf;
+  --accent: #7a73d5;
+  --accent-strong: #9a8fff;
+  --headline: #111322;
+  --text: #181926; /* <- Darker text for Intermediate */
+  --muted: #7a7a9a;
+
+  background: linear-gradient(
+    to bottom,
+    #ffffff 0%,
+    #f5f3fb 15%,
+    #e8e5f5 30%,
+    #d5cce8 45%,
+    #b8afd1 60%,
+    #8a8ab8 75%,
+    #4a4a7a 90%,
+    #0c0f27 100%
+  );
+}
 
   * {
     box-sizing: border-box;
