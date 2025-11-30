@@ -163,15 +163,15 @@
 /* THEME OVERRIDES — Use body theme colors for nav */
 
 body.theme-intermediate .tier-tab {
-  color: #111322;
+  color: #f5f5ff;
 }
 
 body.theme-intermediate .tier-tab.active {
-  color: #111322;
+  color: #f5f5ff;
 }
 
 body.theme-intermediate .chapter-pill {
-  color: #111322;
+  color: #f5f5ff;
 }
 
 body.theme-pre-advanced .tier-tab {
