@@ -1,5 +1,3 @@
-# ask_oracle.py
-
 import os
 import sys
 import argparse
@@ -107,7 +105,10 @@ def ask_openai(prompt: str) -> str:
     resp = client.chat.completions.create(
         model=model,
         messages=[
-            {"role": "system", "content": "You are the OpenAdonAI Oracle, strictly grounded in the provided context."},
+            {
+                "role": "system",
+                "content": "You are the OpenAdonAI Oracle, strictly grounded in the provided context.",
+            },
             {"role": "user", "content": prompt},
         ],
         temperature=0.2,
@@ -130,13 +131,76 @@ def downgrade_mode(mode: str) -> str | None:
 # ---------- CLI ----------
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Ask the OpenAdonAI Archetype Oracle.")
-    parser.add_argument("query", nargs="+", help="Your question.")
-    parser.add_argument("--mode", choices=["short", "deep", "scholar"], default="deep")
-    parser.add_argument("--backend", choices=["none", "ollama", "openai"], default="none")
-    parser.add_argument("-k", "--top-k", type=int, default=None)
-    parser.add_argument("--no-chunks", action="store_true")
-    parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON output.")
+    parser = argparse.ArgumentParser(
+        prog="ask_oracle.py",
+        description=(
+            "Ask the OpenAdonAI Archetype Oracle.\n\n"
+            "This script:\n"
+            "  1) Calls your local RAG API (ORACLE_URL, default http://localhost:9000/search)\n"
+            "  2) Fetches top-k chunks from your Obsidian Archetype index\n"
+            "  3) Builds an Oracle-style prompt\n"
+            "  4) Optionally sends it to an LLM backend (Ollama or OpenAI)\n"
+        ),
+        formatter_class=argparse.RawTextHelpFormatter,
+    )
+
+    parser.add_argument(
+        "query",
+        nargs="+",
+        help='Your question to the Oracle (e.g. "What is the cosmic architecture of the parables?")',
+    )
+
+    parser.add_argument(
+        "--mode",
+        choices=["short", "deep", "scholar"],
+        default="deep",
+        help=(
+            "Answer mode (controls context size + tone):\n"
+            "  short   → ~3 chunks, concise, high-level summary\n"
+            "  deep    → ~7 chunks, structured & detailed (default)\n"
+            "  scholar → ~12 chunks, in-depth, scholarly exposition\n"
+        ),
+    )
+
+    parser.add_argument(
+        "--backend",
+        choices=["none", "ollama", "openai"],
+        default="none",
+        help=(
+            "LLM backend to answer the prompt:\n"
+            "  none   → just build/print prompt (no model call)\n"
+            "  ollama → use local Ollama chat model (OLLAMA_CHAT_MODEL)\n"
+            "  openai → use OpenAI chat completion (OPENAI_API_KEY, OPENAI_MODEL)\n"
+        ),
+    )
+
+    parser.add_argument(
+        "-k",
+        "--top-k",
+        type=int,
+        default=None,
+        help=(
+            "Number of chunks to retrieve from Oracle.\n"
+            "If omitted, defaults are based on --mode:\n"
+            "  short=3, deep=7, scholar=12"
+        ),
+    )
+
+    parser.add_argument(
+        "--no-chunks",
+        action="store_true",
+        help="Do not print the list of top matched chunks (quieter console output).",
+    )
+
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        help=(
+            "Emit machine-readable JSON instead of pretty console output.\n"
+            "JSON includes: success, mode_used, top_k, prompt, answer, results, error."
+        ),
+    )
+
     return parser.parse_args()
 
 
@@ -201,17 +265,24 @@ def main():
     while True:
         if current_mode in tried:
             if args.json:
-                print(json.dumps({
-                    "success": False,
-                    "error": f"Mode '{current_mode}' failed multiple times.",
-                }, indent=2))
+                print(
+                    json.dumps(
+                        {
+                            "success": False,
+                            "error": f"Mode '{current_mode}' failed multiple times.",
+                        },
+                        indent=2,
+                    )
+                )
             else:
                 print(f"❌ Mode '{current_mode}' failed multiple times.")
             return
 
         tried.add(current_mode)
 
-        result = run_oracle_round(query, current_mode, backend, top_k_arg, print_chunks)
+        result = run_oracle_round(
+            query, current_mode, backend, top_k_arg, print_chunks
+        )
 
         if args.json:
             print(json.dumps(result, indent=2))
@@ -231,7 +302,9 @@ def main():
             print(f"❌ No fallback modes left. Error: {result['error']}")
             return
 
-        print(f"\n🔁 Mode '{current_mode}' failed → falling back to '{next_mode}'.")
+        print(
+            f"\n🔁 Mode '{current_mode}' failed → falling back to '{next_mode}'."
+        )
         current_mode = next_mode
 
 
