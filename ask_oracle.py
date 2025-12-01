@@ -1,10 +1,22 @@
+# ask_oracle.py
+
 import os
-import sys
 import argparse
 import requests
 import json
 
+# ---------- Config from environment ----------
+
 ORACLE_URL = os.getenv("ORACLE_URL", "http://localhost:9000/search")
+
+# Ollama models (configurable via .env)
+OLLAMA_CHAT_MODEL = os.getenv("OLLAMA_CHAT_MODEL", "llama3.1:8b")
+OLLAMA_EMBED_MODEL = os.getenv("OLLAMA_EMBED_MODEL", "nomic-embed-text")
+
+# Optional: preload these models at startup (comma-separated in .env)
+OLLAMA_AUTO_PULL = [
+    m.strip() for m in os.getenv("OLLAMA_AUTO_PULL", "").split(",") if m.strip()
+]
 
 # Mode configuration
 MODE_CONFIG = {
@@ -24,6 +36,62 @@ MODE_CONFIG = {
 
 MODE_ORDER = ["short", "deep", "scholar"]
 
+
+# ---------- Ollama helpers ----------
+
+def ensure_ollama_model(model: str):
+    """
+    Ensure the requested Ollama model is available.
+
+    - If Ollama is not reachable → raise helpful error
+    - If model missing → pull it automatically via /api/pull
+    """
+    base = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434").rstrip("/")
+
+    # 1. Check Ollama server is up
+    try:
+        requests.get(base, timeout=3)
+    except Exception as e:
+        raise RuntimeError(
+            f"Ollama is not reachable at {base}. Is the Ollama app or "
+            f"'ollama serve' running?\nDetails: {e}"
+        )
+
+    # 2. Check if model exists
+    show_url = base + "/api/show"
+    try:
+        resp = requests.post(show_url, json={"name": model}, timeout=10)
+    except Exception as e:
+        raise RuntimeError(f"Error talking to Ollama /api/show: {e}")
+
+    if resp.status_code == 200:
+        # Model is already pulled
+        return
+
+    # 3. If not found → pull model
+    print(f"⏬ Pulling Ollama model '{model}' (not found locally)...")
+
+    pull_url = base + "/api/pull"
+    try:
+        with requests.post(pull_url, json={"name": model}, stream=True) as r:
+            r.raise_for_status()
+            for line in r.iter_lines(decode_unicode=True):
+                if not line:
+                    continue
+                try:
+                    data = json.loads(line)
+                    status = data.get("status")
+                    if status:
+                        print("   ", status)
+                except json.JSONDecodeError:
+                    print("   ", line)
+    except Exception as e:
+        raise RuntimeError(f"Failed to pull Ollama model '{model}': {e}")
+
+    print(f"✅ Model '{model}' is now installed.\n")
+
+
+# ---------- RAG / context helpers ----------
 
 def fetch_context(query: str, top_k: int = 5):
     """Call Oracle API and fetch chunks."""
@@ -80,7 +148,10 @@ def pretty_print_results(results):
 def ask_ollama(prompt: str) -> str:
     base = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434").rstrip("/")
     url = base + "/api/chat"
-    model = os.getenv("OLLAMA_CHAT_MODEL", "llama3.1:8b")
+    model = os.getenv("OLLAMA_CHAT_MODEL", OLLAMA_CHAT_MODEL)
+
+    # Ensure the model exists (pull if needed)
+    ensure_ollama_model(model)
 
     payload = {
         "model": model,
@@ -90,7 +161,8 @@ def ask_ollama(prompt: str) -> str:
 
     resp = requests.post(url, json=payload, timeout=240)
     resp.raise_for_status()
-    return resp.json().get("message", {}).get("content", "").strip()
+    data = resp.json()
+    return data.get("message", {}).get("content", "").strip()
 
 
 def ask_openai(prompt: str) -> str:
@@ -204,6 +276,8 @@ def parse_args():
     return parser.parse_args()
 
 
+# ---------- Core execution ----------
+
 def run_oracle_round(query, mode, backend, top_k_arg, print_chunks):
     """Returns dict: {success, mode_used, top_k, prompt, answer, results, error}"""
     output = {
@@ -259,6 +333,14 @@ def main():
     backend = args.backend
     top_k_arg = args.top_k
     print_chunks = not args.no_chunks
+
+    # Optional: preload models listed in OLLAMA_AUTO_PULL
+    if backend == "ollama" and OLLAMA_AUTO_PULL:
+        for m in OLLAMA_AUTO_PULL:
+            try:
+                ensure_ollama_model(m)
+            except Exception as e:
+                print(f"⚠️ Could not preload model '{m}': {e}")
 
     tried = set()
 
