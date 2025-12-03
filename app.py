@@ -7,6 +7,16 @@ from pydantic import BaseModel
 
 from query_index import search_index
 
+import os
+import sys
+import argparse
+import requests
+import json
+
+from dotenv import load_dotenv
+load_dotenv()
+
+
 app = FastAPI(
     title="OpenAdonAI Archetype Oracle",
     description="Local RAG API over Ishmael's Obsidian Archetype vault.",
