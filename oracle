@@ -1,0 +1,463 @@
+#!/bin/zsh
+
+# === CONFIG ===
+RAG_DIR="/Users/ishmael/Developer/OpenAdonAI/Tools/rag_service"
+ENV_FILE="$RAG_DIR/.env"
+LOG_DIR="$RAG_DIR/logs"
+LOG_FILE="$LOG_DIR/oracle.log"
+
+# === HELPERS ===
+
+activate_venv() {
+  if [ -f "$RAG_DIR/.venv/bin/activate" ]; then
+    source "$RAG_DIR/.venv/bin/activate"
+  fi
+}
+
+load_model_name() {
+  # Prefer live env, then .env
+  if [ -n "$OLLAMA_CHAT_MODEL" ]; then
+    ORACLE_MODEL="$OLLAMA_CHAT_MODEL"
+  elif [ -f "$ENV_FILE" ]; then
+    ORACLE_MODEL=$(grep '^OLLAMA_CHAT_MODEL=' "$ENV_FILE" | head -n1 | cut -d'=' -f2-)
+  else
+    ORACLE_MODEL=""
+  fi
+}
+
+load_default_mode() {
+  # Prefer live env, then .env
+  if [ -n "$OPENADONAI_DEFAULT_MODE" ]; then
+    ORACLE_DEFAULT_MODE="$OPENADONAI_DEFAULT_MODE"
+  elif [ -f "$ENV_FILE" ]; then
+    ORACLE_DEFAULT_MODE=$(grep '^OPENADONAI_DEFAULT_MODE=' "$ENV_FILE" | head -n1 | cut -d'=' -f2-)
+  else
+    ORACLE_DEFAULT_MODE=""
+  fi
+}
+
+load_default_backend() {
+  # Prefer live env, then .env
+  if [ -n "$OPENADONAI_DEFAULT_BACKEND" ]; then
+    ORACLE_DEFAULT_BACKEND="$OPENADONAI_DEFAULT_BACKEND"
+  elif [ -f "$ENV_FILE" ]; then
+    ORACLE_DEFAULT_BACKEND=$(grep '^OPENADONAI_DEFAULT_BACKEND=' "$ENV_FILE" | head -n1 | cut -d'=' -f2-)
+  else
+    ORACLE_DEFAULT_BACKEND=""
+  fi
+}
+
+print_help() {
+  load_model_name
+  load_default_mode
+  load_default_backend
+  echo ""
+  echo "🔮 OpenAdonAI Oracle CLI"
+  echo "------------------------"
+  echo "Project dir: $RAG_DIR"
+  if [ -n "$ORACLE_MODEL" ]; then
+    echo "Current model (OLLAMA_CHAT_MODEL): $ORACLE_MODEL"
+  else
+    echo "Current model: (not set – check .env OLLAMA_CHAT_MODEL)"
+  fi
+  if [ -n "$ORACLE_DEFAULT_BACKEND" ]; then
+    echo "Default backend (OPENADONAI_DEFAULT_BACKEND): $ORACLE_DEFAULT_BACKEND"
+  fi
+  if [ -n "$ORACLE_DEFAULT_MODE" ]; then
+    echo "Default answer mode (OPENADONAI_DEFAULT_MODE): $ORACLE_DEFAULT_MODE"
+  fi
+  echo ""
+  echo "Ask the Oracle (clean, no history):"
+  echo "  oracle \"your question\""
+  echo "  oracle --mode short   \"your question\""
+  echo "  oracle --mode deep    \"your question\""
+  echo "  oracle --mode scholar \"your question\""
+  echo ""
+  echo "Continuum mode (with log-based context & persona):"
+  echo "  oracle continuum --mode scholar \"your question\""
+  echo "  oracle continuum --persona mystic --depth deep \"your question\""
+  echo ""
+  echo "Answer Depth Modes (mapped to ask_oracle.py --mode):"
+  echo "  short     → ~3 chunks, concise, high-level summary."
+  echo "  deep      → ~7 chunks, structured detailed answer (recommended default)."
+  echo "  scholar   → ~12 chunks, in-depth, scholarly, multi-layer mapping."
+  echo ""
+  echo "Continuum Persona Options (examples):"
+  echo "  --persona scholar   → textual, structured, scriptural / academic tone."
+  echo "  --persona mystic    → visionary, Melchizedek / cosmic pattern tone."
+  echo "  --persona engineer  → technical, code / infra / AI tone."
+  echo "If you use:  oracle continuum --mode scholar ..."
+  echo "it will set depth=scholar and persona=scholar."
+  echo ""
+  echo "Subcommands:"
+  echo "  oracle health       Check RAG API, Ollama, and model availability."
+  echo "  oracle start        Start the FastAPI RAG server (uvicorn) with logging."
+  echo "  oracle stop         Stop the FastAPI RAG server."
+  echo "  oracle log          Tail the Oracle logs."
+  echo "  oracle test         Run an end-to-end Oracle self-test."
+  echo "  oracle modes        Show details about the available answer modes."
+  echo "  oracle continuum    Ask with continuity + persona/depth shaping."
+  echo ""
+  echo "Tips:"
+  echo "  • Set OPENADONAI_DEFAULT_BACKEND=ollama in your .env"
+  echo "  • Set OLLAMA_CHAT_MODEL=mistral:instruct in your .env"
+  echo "  • Use scholar depth for maximum context, and scholar persona for"
+  echo "    maximum textual, layered exposition."
+  echo ""
+}
+
+cmd_modes() {
+  load_default_mode
+  echo ""
+  echo "📚 Oracle Answer Modes"
+  echo "----------------------"
+  echo "The Oracle supports three primary depth modes (ask_oracle.py --mode):"
+  echo ""
+  echo "  short"
+  echo "    • Uses fewer context chunks (~3)."
+  echo "    • Good for quick clarifications and high-level summaries."
+  echo ""
+  echo "  deep"
+  echo "    • Uses more context (~7 chunks)."
+  echo "    • Provides structured, sectioned answers with clear reasoning."
+  echo "    • Ideal general-purpose mode for most queries."
+  echo ""
+  echo "  scholar"
+  echo "    • Uses the most context (~12 chunks)."
+  echo "    • Provides in-depth, scholarly exposition."
+  echo "    • Best for complex mappings (Melchizedek roles, volt grids,"
+  echo "      Kabbalistic structures, multi-plane cosmology, etc.)."
+  echo ""
+  if [ -n "$ORACLE_DEFAULT_MODE" ]; then
+    echo "Current default mode (from OPENADONAI_DEFAULT_MODE): $ORACLE_DEFAULT_MODE"
+  else
+    echo "No default mode explicitly set in env; ask_oracle.py falls back to 'deep'."
+  fi
+  echo ""
+  echo "Examples (clean mode, no continuity):"
+  echo "  oracle --mode short   \"Give a high-level summary of the Volt Grid.\""
+  echo "  oracle --mode deep    \"Explain the cosmic architecture of the parables.\""
+  echo "  oracle --mode scholar \"Map the Fourth Aett to the Melchizedek tetrad.\""
+  echo ""
+  echo "Continuum examples (with continuity & persona):"
+  echo "  oracle continuum --mode scholar \"Continue mapping the Gospel to the four directions.\""
+  echo "  oracle continuum --persona mystic --depth deep \"Continue from last night's astral work.\""
+  echo ""
+}
+
+cmd_health() {
+  activate_venv
+  mkdir -p "$LOG_DIR"
+
+  echo "🔎 Oracle Health Check"
+  echo "----------------------"
+
+  # 1) Check RAG API /health
+  ORACLE_URL="${ORACLE_URL:-http://localhost:9000}"
+  echo "• RAG API: ${ORACLE_URL}/health"
+  HEALTH_RESP=$(curl -s "${ORACLE_URL}/health")
+  if [[ "$HEALTH_RESP" == *"\"status\":\"ok\""* ]]; then
+    echo "  ✅ RAG service is responding."
+  else
+    echo "  ❌ RAG service is NOT responding."
+    echo "     Response: $HEALTH_RESP"
+  fi
+
+  # 2) Determine model
+  load_model_name
+  ORACLE_MODEL="${ORACLE_MODEL:-"(not set)"}"
+  echo "• Oracle chat model: $ORACLE_MODEL"
+
+  # 3) Check Ollama connectivity
+  OLLAMA_BASE_URL="${OLLAMA_BASE_URL:-http://localhost:11434}"
+  echo "• Ollama API: $OLLAMA_BASE_URL"
+
+  TAGS=$(curl -s "$OLLAMA_BASE_URL/api/tags")
+  if [ $? -ne 0 ] || [ -z "$TAGS" ]; then
+    echo "  ❌ Ollama is not responding."
+  else
+    echo "  ✅ Ollama is responding."
+  fi
+
+  # 4) Check if the model is installed in Ollama (if known)
+  if [ "$ORACLE_MODEL" != "(not set)" ]; then
+    echo "• Checking model presence in Ollama…"
+    echo "$TAGS" | grep -q "\"name\":\"$ORACLE_MODEL\"" && \
+      echo "  ✅ Model '$ORACLE_MODEL' found in Ollama." || \
+      echo "  ⚠️ Model '$ORACLE_MODEL' NOT found in Ollama tags. Try: ollama pull $ORACLE_MODEL"
+  fi
+
+  echo ""
+}
+
+cmd_start() {
+  activate_venv
+  mkdir -p "$LOG_DIR"
+  cd "$RAG_DIR" || exit 1
+
+  echo "🚀 Starting Oracle RAG server (uvicorn app:app on port 9000)…"
+  nohup uvicorn app:app --host 0.0.0.0 --port 9000 --reload >> "$LOG_FILE" 2>&1 &
+
+  PID=$!
+  echo "  ✅ Started with PID: $PID"
+  echo "  📜 Logs: $LOG_FILE"
+  echo ""
+}
+
+cmd_stop() {
+  echo "🛑 Stopping Oracle RAG server on port 9000…"
+
+  PIDS=$(lsof -t -i:9000 2>/dev/null)
+
+  if [ -n "$PIDS" ]; then
+    echo "  Found PIDs: $PIDS"
+    kill $PIDS
+    echo "  ✅ Sent termination signal to processes."
+  else
+    echo "  ⚠️ No processes found listening on port 9000."
+  fi
+
+  echo ""
+}
+
+cmd_log() {
+  mkdir -p "$LOG_DIR"
+  if [ ! -f "$LOG_FILE" ]; then
+    echo "📜 Oracle log file not found at: $LOG_FILE"
+    echo "Try running 'oracle start' or a query first."
+    exit 1
+  fi
+
+  echo "📜 Tailing Oracle logs (Ctrl+C to exit)…"
+  tail -n 50 -f "$LOG_FILE"
+}
+
+cmd_test() {
+  activate_venv
+  echo "🧪 Running Oracle self-test"
+  echo "---------------------------"
+
+  # 1) Health check
+  cmd_health
+
+  # 2) Quick RAG + model query
+  echo "• Testing a short Oracle query via ask_oracle.py…"
+  cd "$RAG_DIR" || exit 1
+
+  python ask_oracle.py --backend ollama --mode short --no-chunks "Oracle self-test: brief confirmation that RAG and model are working." 2>/tmp/oracle-test.err
+  STATUS=$?
+
+  if [ $STATUS -eq 0 ]; then
+    echo ""
+    echo "✅ Oracle self-test completed. If you saw an answer above, everything is wired."
+  else
+    echo ""
+    echo "❌ Oracle self-test failed (exit code $STATUS)."
+    echo "Error output:"
+    cat /tmp/oracle-test.err
+  fi
+
+  echo ""
+}
+
+cmd_query() {
+  # Anything that's not a recognized subcommand is treated as a query.
+  # Default = clean mode: no continuity, direct ask_oracle.py invocation.
+  activate_venv
+  cd "$RAG_DIR" || exit 1
+  python ask_oracle.py "$@"
+}
+
+cmd_continuum() {
+  # Continuum mode: include log-tail continuity + persona + depth.
+  activate_venv
+  mkdir -p "$LOG_DIR"
+  cd "$RAG_DIR" || exit 1
+
+  load_default_mode
+  load_default_backend
+
+  # Defaults
+  PERSONA="default"
+  DEPTH=""
+  QUESTION=""
+
+  # Parse flags: --mode, --persona, --depth
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --mode)
+        # Legacy-friendly: --mode short|deep|scholar
+        #  - short/deep → depth only
+        #  - scholar    → depth+persona scholar
+        MODE_VAL="$2"
+        case "$MODE_VAL" in
+          short|deep|scholar)
+            DEPTH="$MODE_VAL"
+            if [ "$MODE_VAL" = "scholar" ]; then
+              PERSONA="scholar"
+            fi
+            ;;
+          *)
+            # Unknown as depth: treat as persona
+            PERSONA="$MODE_VAL"
+            ;;
+        esac
+        shift 2
+        ;;
+      --persona)
+        PERSONA="$2"
+        shift 2
+        ;;
+      --depth)
+        DEPTH="$2"
+        shift 2
+        ;;
+      --help|-h)
+        echo ""
+        echo "Usage: oracle continuum [--mode MODE] [--persona PERSONA] [--depth DEPTH] \"your question\""
+        echo ""
+        echo "Examples:"
+        echo "  oracle continuum --mode scholar \"Continue our last Melchizedek mapping.\""
+        echo "  oracle continuum --persona mystic --depth deep \"Continue astral repair thread.\""
+        echo ""
+        return 0
+        ;;
+      -*)
+        # Unknown flag in continuum mode: ignore or extend later
+        echo "⚠️  Ignoring unrecognized flag in continuum mode: $1"
+        shift
+        ;;
+      *)
+        # First non-flag: treat the rest as the question
+        QUESTION="$*"
+        break
+        ;;
+    esac
+  done
+
+  if [ -z "$QUESTION" ]; then
+    echo "❌ No question provided for continuum mode."
+    echo "   Example: oracle continuum --mode scholar \"your question here\""
+    return 1
+  fi
+
+  # Default depth if not set: use OPENADONAI_DEFAULT_MODE or 'deep'
+  if [ -z "$DEPTH" ]; then
+    if [ -n "$ORACLE_DEFAULT_MODE" ]; then
+      DEPTH="$ORACLE_DEFAULT_MODE"
+    else
+      DEPTH="deep"
+    fi
+  fi
+
+  # Backend default
+  if [ -n "$ORACLE_DEFAULT_BACKEND" ]; then
+    BACKEND="$ORACLE_DEFAULT_BACKEND"
+  else
+    BACKEND="ollama"
+  fi
+
+  # Persona preambles
+  case "$PERSONA" in
+    scholar)
+      PERSONA_PROMPT="You are the OpenAdonAI Oracle in SCHOLAR mode.\n- Prioritize clarity, structure, and textual precision.\n- Anchor interpretations in scripture, Hermetic/Kabbalistic pattern, and careful reasoning.\n- Use headings and layered exposition when appropriate."
+      ;;
+    mystic)
+      PERSONA_PROMPT="You are the OpenAdonAI Oracle in MYSTIC mode.\n- Emphasize visionary, Melchizedek, and cosmic pattern insight.\n- Preserve metaphors and symbolic correspondences while remaining coherent and grounded."
+      ;;
+    engineer)
+      PERSONA_PROMPT="You are the OpenAdonAI Oracle in ENGINEER mode.\n- Focus on code, architecture, infrastructure, and practical implementation details.\n- Be precise, stepwise, and explicit."
+      ;;
+    *)
+      PERSONA_PROMPT="You are the OpenAdonAI Oracle.\nAnswer clearly, helpfully, and with awareness of prior context."
+      ;;
+  esac
+
+  # Depth hints
+  case "$DEPTH" in
+    short)
+      STYLE_HINT="Respond concisely, focusing on the most essential points only."
+      ;;
+    deep)
+      STYLE_HINT="Provide a thorough, structured answer with clear sections and reasoning."
+      ;;
+    scholar)
+      STYLE_HINT="Provide a deep, scholarly exposition: layered structure, key sources, and careful mapping of concepts."
+      ;;
+    *)
+      STYLE_HINT=""
+      ;;
+  esac
+
+  # Tail log for continuity (may contain server logs + prior Q&A)
+  if [ -f "$LOG_FILE" ]; then
+    HISTORY=$(tail -n 80 "$LOG_FILE")
+  else
+    HISTORY=""
+  fi
+
+  # Build the full prompt
+  FULL_PROMPT="${PERSONA_PROMPT}
+
+${STYLE_HINT}
+
+Below is a recent slice of the Oracle log for continuity. It may contain system messages, prior questions and answers, and notes:
+
+${HISTORY}
+
+Now continue the conversation.
+
+User: ${QUESTION}
+
+Oracle:"
+
+  # Log the question and metadata
+  {
+    echo ""
+    echo "--------------------"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [CONTINUUM] persona=${PERSONA} depth=${DEPTH} backend=${BACKEND}"
+    echo "Q: ${QUESTION}"
+  } >> "$LOG_FILE"
+
+  # Call ask_oracle.py with backend + depth as mode, piping answer to both stdout and log
+  python ask_oracle.py --backend "$BACKEND" --mode "$DEPTH" "$FULL_PROMPT" | tee -a "$LOG_FILE"
+  echo "" >> "$LOG_FILE"
+}
+
+# === MAIN DISPATCH ===
+
+if [ $# -eq 0 ]; then
+  print_help
+  exit 0
+fi
+
+SUBCOMMAND="$1"
+shift
+
+case "$SUBCOMMAND" in
+  health)
+    cmd_health "$@"
+    ;;
+  start)
+    cmd_start "$@"
+    ;;
+  stop)
+    cmd_stop "$@"
+    ;;
+  log)
+    cmd_log "$@"
+    ;;
+  test)
+    cmd_test "$@"
+    ;;
+  modes)
+    cmd_modes "$@"
+    ;;
+  continuum)
+    cmd_continuum "$@"
+    ;;
+  *)
+    # Treat everything else as args to ask_oracle.py (clean mode)
+    cmd_query "$SUBCOMMAND" "$@"
+    ;;
+esac
