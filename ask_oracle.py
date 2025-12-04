@@ -1,22 +1,16 @@
 # ask_oracle.py
 
 import os
+import sys
 import argparse
 import requests
 import json
 
-# ---------- Config from environment ----------
+from dotenv import load_dotenv
+load_dotenv()
 
 ORACLE_URL = os.getenv("ORACLE_URL", "http://localhost:9000/search")
 
-# Ollama models (configurable via .env)
-OLLAMA_CHAT_MODEL = os.getenv("OLLAMA_CHAT_MODEL", "llama3.1:8b")
-OLLAMA_EMBED_MODEL = os.getenv("OLLAMA_EMBED_MODEL", "nomic-embed-text")
-
-# Optional: preload these models at startup (comma-separated in .env)
-OLLAMA_AUTO_PULL = [
-    m.strip() for m in os.getenv("OLLAMA_AUTO_PULL", "").split(",") if m.strip()
-]
 
 # Mode configuration
 MODE_CONFIG = {
@@ -36,62 +30,26 @@ MODE_CONFIG = {
 
 MODE_ORDER = ["short", "deep", "scholar"]
 
+# -------- Env-based defaults --------
 
-# ---------- Ollama helpers ----------
+_env_mode = os.getenv("OPENADONAI_DEFAULT_MODE", "deep").strip().lower()
+DEFAULT_MODE = _env_mode if _env_mode in MODE_CONFIG else "deep"
 
-def ensure_ollama_model(model: str):
-    """
-    Ensure the requested Ollama model is available.
+_env_backend = os.getenv("OPENADONAI_DEFAULT_BACKEND", "none").strip().lower()
+DEFAULT_BACKEND = _env_backend if _env_backend in {"none", "ollama", "openai"} else "none"
 
-    - If Ollama is not reachable → raise helpful error
-    - If model missing → pull it automatically via /api/pull
-    """
-    base = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434").rstrip("/")
-
-    # 1. Check Ollama server is up
+# Optional env default for top_k
+_env_top_k_raw = os.getenv("OPENADONAI_DEFAULT_TOP_K", "").strip()
+ENV_DEFAULT_TOP_K: int | None
+if _env_top_k_raw:
     try:
-        requests.get(base, timeout=3)
-    except Exception as e:
-        raise RuntimeError(
-            f"Ollama is not reachable at {base}. Is the Ollama app or "
-            f"'ollama serve' running?\nDetails: {e}"
-        )
+        val = int(_env_top_k_raw)
+        ENV_DEFAULT_TOP_K = val if val > 0 else None
+    except ValueError:
+        ENV_DEFAULT_TOP_K = None
+else:
+    ENV_DEFAULT_TOP_K = None
 
-    # 2. Check if model exists
-    show_url = base + "/api/show"
-    try:
-        resp = requests.post(show_url, json={"name": model}, timeout=10)
-    except Exception as e:
-        raise RuntimeError(f"Error talking to Ollama /api/show: {e}")
-
-    if resp.status_code == 200:
-        # Model is already pulled
-        return
-
-    # 3. If not found → pull model
-    print(f"⏬ Pulling Ollama model '{model}' (not found locally)...")
-
-    pull_url = base + "/api/pull"
-    try:
-        with requests.post(pull_url, json={"name": model}, stream=True) as r:
-            r.raise_for_status()
-            for line in r.iter_lines(decode_unicode=True):
-                if not line:
-                    continue
-                try:
-                    data = json.loads(line)
-                    status = data.get("status")
-                    if status:
-                        print("   ", status)
-                except json.JSONDecodeError:
-                    print("   ", line)
-    except Exception as e:
-        raise RuntimeError(f"Failed to pull Ollama model '{model}': {e}")
-
-    print(f"✅ Model '{model}' is now installed.\n")
-
-
-# ---------- RAG / context helpers ----------
 
 def fetch_context(query: str, top_k: int = 5):
     """Call Oracle API and fetch chunks."""
@@ -148,10 +106,7 @@ def pretty_print_results(results):
 def ask_ollama(prompt: str) -> str:
     base = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434").rstrip("/")
     url = base + "/api/chat"
-    model = os.getenv("OLLAMA_CHAT_MODEL", OLLAMA_CHAT_MODEL)
-
-    # Ensure the model exists (pull if needed)
-    ensure_ollama_model(model)
+    model = os.getenv("OLLAMA_CHAT_MODEL", "llama3.1:8b")
 
     payload = {
         "model": model,
@@ -161,8 +116,7 @@ def ask_ollama(prompt: str) -> str:
 
     resp = requests.post(url, json=payload, timeout=240)
     resp.raise_for_status()
-    data = resp.json()
-    return data.get("message", {}).get("content", "").strip()
+    return resp.json().get("message", {}).get("content", "").strip()
 
 
 def ask_openai(prompt: str) -> str:
@@ -211,7 +165,11 @@ def parse_args():
             "  1) Calls your local RAG API (ORACLE_URL, default http://localhost:9000/search)\n"
             "  2) Fetches top-k chunks from your Obsidian Archetype index\n"
             "  3) Builds an Oracle-style prompt\n"
-            "  4) Optionally sends it to an LLM backend (Ollama or OpenAI)\n"
+            "  4) Optionally sends it to an LLM backend (Ollama or OpenAI)\n\n"
+            "Env defaults:\n"
+            "  OPENADONAI_DEFAULT_MODE      → default mode (short|deep|scholar)\n"
+            "  OPENADONAI_DEFAULT_BACKEND   → default backend (none|ollama|openai)\n"
+            "  OPENADONAI_DEFAULT_TOP_K     → default top_k (int > 0)\n"
         ),
         formatter_class=argparse.RawTextHelpFormatter,
     )
@@ -225,24 +183,26 @@ def parse_args():
     parser.add_argument(
         "--mode",
         choices=["short", "deep", "scholar"],
-        default="deep",
+        default=DEFAULT_MODE,
         help=(
             "Answer mode (controls context size + tone):\n"
             "  short   → ~3 chunks, concise, high-level summary\n"
             "  deep    → ~7 chunks, structured & detailed (default)\n"
             "  scholar → ~12 chunks, in-depth, scholarly exposition\n"
+            f"\nDefault: {DEFAULT_MODE!r} (can override via OPENADONAI_DEFAULT_MODE)"
         ),
     )
 
     parser.add_argument(
         "--backend",
         choices=["none", "ollama", "openai"],
-        default="none",
+        default=DEFAULT_BACKEND,
         help=(
             "LLM backend to answer the prompt:\n"
             "  none   → just build/print prompt (no model call)\n"
             "  ollama → use local Ollama chat model (OLLAMA_CHAT_MODEL)\n"
             "  openai → use OpenAI chat completion (OPENAI_API_KEY, OPENAI_MODEL)\n"
+            f"\nDefault: {DEFAULT_BACKEND!r} (can override via OPENADONAI_DEFAULT_BACKEND)"
         ),
     )
 
@@ -250,11 +210,12 @@ def parse_args():
         "-k",
         "--top-k",
         type=int,
-        default=None,
+        default=ENV_DEFAULT_TOP_K,
         help=(
             "Number of chunks to retrieve from Oracle.\n"
-            "If omitted, defaults are based on --mode:\n"
-            "  short=3, deep=7, scholar=12"
+            "If omitted, defaults are based on --mode (short=3, deep=7, scholar=12).\n"
+            "You can also set a global default via OPENADONAI_DEFAULT_TOP_K.\n"
+            "CLI -k always overrides env / mode defaults."
         ),
     )
 
@@ -276,8 +237,6 @@ def parse_args():
     return parser.parse_args()
 
 
-# ---------- Core execution ----------
-
 def run_oracle_round(query, mode, backend, top_k_arg, print_chunks):
     """Returns dict: {success, mode_used, top_k, prompt, answer, results, error}"""
     output = {
@@ -290,8 +249,16 @@ def run_oracle_round(query, mode, backend, top_k_arg, print_chunks):
         "error": "",
     }
 
-    # Decide top_k
-    top_k = top_k_arg if top_k_arg is not None else MODE_CONFIG[mode]["top_k"]
+    # Decide top_k: CLI > env default > mode default
+    if top_k_arg is not None:
+        top_k = top_k_arg
+    else:
+        env_k = ENV_DEFAULT_TOP_K
+        if env_k is not None:
+            top_k = env_k
+        else:
+            top_k = MODE_CONFIG[mode]["top_k"]
+
     output["top_k"] = top_k
 
     try:
@@ -334,39 +301,26 @@ def main():
     top_k_arg = args.top_k
     print_chunks = not args.no_chunks
 
-    # Optional: preload models listed in OLLAMA_AUTO_PULL
-    if backend == "ollama" and OLLAMA_AUTO_PULL:
-        for m in OLLAMA_AUTO_PULL:
-            try:
-                ensure_ollama_model(m)
-            except Exception as e:
-                print(f"⚠️ Could not preload model '{m}': {e}")
-
     tried = set()
 
     while True:
         if current_mode in tried:
             if args.json:
-                print(
-                    json.dumps(
-                        {
-                            "success": False,
-                            "error": f"Mode '{current_mode}' failed multiple times.",
-                        },
-                        indent=2,
-                    )
-                )
+                print(json.dumps({
+                    "success": False,
+                    "error": f"Mode '{current_mode}' failed multiple times.",
+                }, indent=2))
             else:
                 print(f"❌ Mode '{current_mode}' failed multiple times.")
             return
 
         tried.add(current_mode)
 
-        result = run_oracle_round(
-            query, current_mode, backend, top_k_arg, print_chunks
-        )
+        result = run_oracle_round(query, current_mode, backend, top_k_arg, print_chunks)
 
         if args.json:
+            # augment with mode_used
+            result["mode_used"] = current_mode
             print(json.dumps(result, indent=2))
             return
 
@@ -384,9 +338,7 @@ def main():
             print(f"❌ No fallback modes left. Error: {result['error']}")
             return
 
-        print(
-            f"\n🔁 Mode '{current_mode}' failed → falling back to '{next_mode}'."
-        )
+        print(f"\n🔁 Mode '{current_mode}' failed → falling back to '{next_mode}'.")
         current_mode = next_mode
 
 
