@@ -98,6 +98,7 @@ print_help() {
   echo "  oracle modes        Show details about the available answer modes."
   echo "  oracle continuum    Ask with continuity + persona/depth shaping."
   echo "  oracle index        Run index_obsidian.py to (re)build the RAG index from your vault."
+  echo "  oracle sources      Preview which sources (Obsidian + Books) would be used for a question."
   echo ""
   echo "Tips:"
   echo "  • Set OPENADONAI_DEFAULT_BACKEND=ollama in your .env"
@@ -270,6 +271,26 @@ cmd_index() {
   echo ""
 
   python index_obsidian.py "$@"
+}
+
+cmd_sources() {
+  # Preview which sources (Obsidian + Books) would be used, without calling the LLM.
+  activate_venv
+  cd "$RAG_DIR" || exit 1
+
+  if [ $# -eq 0 ]; then
+    echo ""
+    echo "Usage: oracle sources [--mode MODE] [--include-books|--no-books] \"your question\""
+    echo ""
+    echo "Examples:"
+    echo "  oracle sources \"Where is the 'Volt Architect Path' scroll located and what is its main purpose?\""
+    echo "  oracle sources --mode scholar \"How do Bardon's elements map to my Volt System?\""
+    echo ""
+    return 1
+  fi
+
+  # Force backend=none and sources-only, pass through mode/flags/query
+  python ask_oracle.py --backend none --sources-only "$@"
 }
 
 cmd_query() {
@@ -470,6 +491,9 @@ case "$SUBCOMMAND" in
     ;;
   index)
     cmd_index "$@"
+    ;;
+  sources)
+    cmd_sources "$@"
     ;;
   *)
     # Treat everything else as args to ask_oracle.py (clean mode)
