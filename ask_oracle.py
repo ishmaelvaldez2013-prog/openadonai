@@ -9,8 +9,21 @@ import json
 from dotenv import load_dotenv
 load_dotenv()
 
+# Optional integration with AnythingLLM book workspace
+try:
+    from anythingllm_client import query_anythingllm_books, is_anythingllm_enabled
+except ImportError:
+    # Graceful fallback if the client is not present; books will be disabled.
+    def is_anythingllm_enabled() -> bool:
+        return False
+
+    def query_anythingllm_books(question: str, max_snippets: int = 5):
+        return {"text": "", "context": ""}
+
 ORACLE_URL = os.getenv("ORACLE_URL", "http://localhost:9000/search")
 
+# Env toggle for including book context by default
+INCLUDE_BOOKS_ENV = os.getenv("OPENADONAI_INCLUDE_BOOKS", "false").strip().lower() == "true"
 
 # Mode configuration
 MODE_CONFIG = {
@@ -52,7 +65,7 @@ else:
 
 
 def fetch_context(query: str, top_k: int = 5):
-    """Call Oracle API and fetch chunks."""
+    """Call Oracle RAG API (Obsidian index) and fetch chunks."""
     resp = requests.post(
         ORACLE_URL,
         json={"query": query, "top_k": top_k},
@@ -68,21 +81,47 @@ def fetch_context(query: str, top_k: int = 5):
     return results, context
 
 
-def build_prompt(query: str, context: str, mode: str) -> str:
+def build_prompt(query: str, obsidian_context: str, mode: str, book_context: str = "") -> str:
+    """
+    Build the final Oracle prompt with:
+      - Obsidian Vault context (mandatory if present)
+      - Embedded Book Library context (AnythingLLM), if provided
+    """
     mode_cfg = MODE_CONFIG.get(mode, MODE_CONFIG["deep"])
     style_hint = mode_cfg["style_hint"]
+
+    obsidian_context = (obsidian_context or "").strip()
+    book_context = (book_context or "").strip()
+
+    if obsidian_context and book_context:
+        combined_context = f"""### Obsidian Vault Context
+{obsidian_context}
+
+### Embedded Book Library Context (AnythingLLM)
+{book_context}"""
+    elif obsidian_context:
+        combined_context = obsidian_context
+    elif book_context:
+        combined_context = f"""### Embedded Book Library Context (AnythingLLM)
+{book_context}"""
+    else:
+        combined_context = ""
 
     return f"""
 You are the OpenAdonAI Oracle.
 
-Use ONLY the context below from my Archetype vault to answer the question.
+You have access to two knowledge sources:
+1. Obsidian Vault – Ishmael's scrolls, notes, volt systems, and development logs.
+2. Embedded Book Library – PDF books indexed via AnythingLLM.
+
+Use ONLY the provided context below to answer the question.
 If the context does not contain the answer, say so. Do not invent unrelated information.
 
 Answer style mode: {mode.upper()}
 Guidance: {style_hint}
 
 ======== BEGIN CONTEXT ========
-{context}
+{combined_context}
 ======== END CONTEXT ==========
 
 QUESTION:
@@ -163,13 +202,15 @@ def parse_args():
             "Ask the OpenAdonAI Archetype Oracle.\n\n"
             "This script:\n"
             "  1) Calls your local RAG API (ORACLE_URL, default http://localhost:9000/search)\n"
-            "  2) Fetches top-k chunks from your Obsidian Archetype index\n"
-            "  3) Builds an Oracle-style prompt\n"
-            "  4) Optionally sends it to an LLM backend (Ollama or OpenAI)\n\n"
+            "  2) Fetches top-k chunks from your Obsidian index\n"
+            "  3) Optionally also fetches RAG context from AnythingLLM embedded book workspace\n"
+            "  4) Builds an Oracle-style prompt\n"
+            "  5) Optionally sends it to an LLM backend (Ollama or OpenAI)\n\n"
             "Env defaults:\n"
-            "  OPENADONAI_DEFAULT_MODE      → default mode (short|deep|scholar)\n"
-            "  OPENADONAI_DEFAULT_BACKEND   → default backend (none|ollama|openai)\n"
-            "  OPENADONAI_DEFAULT_TOP_K     → default top_k (int > 0)\n"
+            "  OPENADONAI_DEFAULT_MODE        → default mode (short|deep|scholar)\n"
+            "  OPENADONAI_DEFAULT_BACKEND     → default backend (none|ollama|openai)\n"
+            "  OPENADONAI_DEFAULT_TOP_K       → default top_k (int > 0)\n"
+            "  OPENADONAI_INCLUDE_BOOKS       → 'true' to include book context by default\n"
         ),
         formatter_class=argparse.RawTextHelpFormatter,
     )
@@ -212,7 +253,7 @@ def parse_args():
         type=int,
         default=ENV_DEFAULT_TOP_K,
         help=(
-            "Number of chunks to retrieve from Oracle.\n"
+            "Number of chunks to retrieve from Oracle (Obsidian).\n"
             "If omitted, defaults are based on --mode (short=3, deep=7, scholar=12).\n"
             "You can also set a global default via OPENADONAI_DEFAULT_TOP_K.\n"
             "CLI -k always overrides env / mode defaults."
@@ -230,15 +271,33 @@ def parse_args():
         action="store_true",
         help=(
             "Emit machine-readable JSON instead of pretty console output.\n"
-            "JSON includes: success, mode_used, top_k, prompt, answer, results, error."
+            "JSON includes: success, mode_used, top_k, prompt, answer, results, error, book_context_used."
         ),
+    )
+
+    parser.add_argument(
+        "--include-books",
+        action="store_true",
+        help="Also pull RAG context from AnythingLLM embedded book workspace for this query.",
+    )
+
+    parser.add_argument(
+        "--no-books",
+        action="store_true",
+        help="Force-disable book context even if OPENADONAI_INCLUDE_BOOKS=true.",
     )
 
     return parser.parse_args()
 
 
-def run_oracle_round(query, mode, backend, top_k_arg, print_chunks):
-    """Returns dict: {success, mode_used, top_k, prompt, answer, results, error}"""
+def run_oracle_round(query, mode, backend, top_k_arg, print_chunks, include_books):
+    """
+    Returns dict:
+      {
+        success, mode_used, top_k, prompt, answer,
+        results, error, book_context_used
+      }
+    """
     output = {
         "success": False,
         "mode_used": mode,
@@ -247,6 +306,7 @@ def run_oracle_round(query, mode, backend, top_k_arg, print_chunks):
         "answer": "",
         "results": [],
         "error": "",
+        "book_context_used": False,
     }
 
     # Decide top_k: CLI > env default > mode default
@@ -261,8 +321,9 @@ def run_oracle_round(query, mode, backend, top_k_arg, print_chunks):
 
     output["top_k"] = top_k
 
+    # 1) Obsidian context via Oracle RAG
     try:
-        results, context = fetch_context(query, top_k)
+        results, obsidian_context = fetch_context(query, top_k)
         output["results"] = results
     except Exception as e:
         output["error"] = f"Error fetching context: {e}"
@@ -271,14 +332,28 @@ def run_oracle_round(query, mode, backend, top_k_arg, print_chunks):
     if print_chunks:
         pretty_print_results(results)
 
-    # Build prompt
-    prompt = build_prompt(query, context, mode)
+    # 2) Embedded book context via AnythingLLM (optional)
+    book_context = ""
+    if include_books and is_anythingllm_enabled():
+        try:
+            book_result = query_anythingllm_books(query, max_snippets=5)
+            book_context = (book_result.get("context") or "").strip()
+            if book_context:
+                output["book_context_used"] = True
+        except Exception as e:
+            # Non-fatal: we just log to stderr and proceed with Obsidian only
+            sys.stderr.write(f"⚠️  Error querying AnythingLLM books: {e}\n")
+            sys.stderr.flush()
+
+    # 3) Build prompt
+    prompt = build_prompt(query, obsidian_context, mode, book_context=book_context)
     output["prompt"] = prompt
 
     if backend == "none":
         output["success"] = True
         return output
 
+    # 4) Call LLM backend
     try:
         if backend == "ollama":
             answer = ask_ollama(prompt)
@@ -301,6 +376,16 @@ def main():
     top_k_arg = args.top_k
     print_chunks = not args.no_chunks
 
+    # Resolve whether to include book context this run
+    # Priority: CLI flags > env
+    include_books = False
+    if args.no_books:
+        include_books = False
+    elif args.include_books:
+        include_books = True
+    else:
+        include_books = INCLUDE_BOOKS_ENV
+
     tried = set()
 
     while True:
@@ -316,7 +401,14 @@ def main():
 
         tried.add(current_mode)
 
-        result = run_oracle_round(query, current_mode, backend, top_k_arg, print_chunks)
+        result = run_oracle_round(
+            query=query,
+            mode=current_mode,
+            backend=backend,
+            top_k_arg=top_k_arg,
+            print_chunks=print_chunks,
+            include_books=include_books,
+        )
 
         if args.json:
             # augment with mode_used
@@ -328,6 +420,8 @@ def main():
         if result["success"]:
             if result["answer"]:
                 print("\n================= ORACLE ANSWER =================\n")
+                if result.get("book_context_used"):
+                    print("(📚 Book context used from AnythingLLM)\n")
                 print(result["answer"])
                 print("\n=================================================\n")
             return
