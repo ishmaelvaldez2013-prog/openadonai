@@ -97,6 +97,7 @@ print_help() {
   echo "  oracle test         Run an end-to-end Oracle self-test."
   echo "  oracle modes        Show details about the available answer modes."
   echo "  oracle continuum    Ask with continuity + persona/depth shaping."
+  echo "  oracle index        Run index_obsidian.py to (re)build the RAG index from your vault."
   echo ""
   echo "Tips:"
   echo "  • Set OPENADONAI_DEFAULT_BACKEND=ollama in your .env"
@@ -258,6 +259,17 @@ cmd_test() {
   fi
 
   echo ""
+}
+
+cmd_index() {
+  activate_venv
+  cd "$RAG_DIR" || exit 1
+
+  echo "📚 Rebuilding Oracle index from Obsidian vault..."
+  echo "   (Using index_obsidian.py in $RAG_DIR)"
+  echo ""
+
+  python index_obsidian.py "$@"
 }
 
 cmd_query() {
@@ -455,6 +467,9 @@ case "$SUBCOMMAND" in
     ;;
   continuum)
     cmd_continuum "$@"
+    ;;
+  index)
+    cmd_index "$@"
     ;;
   *)
     # Treat everything else as args to ask_oracle.py (clean mode)
