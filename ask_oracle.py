@@ -1,5 +1,3 @@
-# ask_oracle.py
-
 import os
 import sys
 import argparse
@@ -19,7 +17,6 @@ except ImportError:
 
     def query_anythingllm_books(question: str, max_snippets: int = 5):
         return {"text": "", "context": "", "sources": []}
-
 
 ORACLE_URL = os.getenv("ORACLE_URL", "http://localhost:9000/search")
 
@@ -43,6 +40,34 @@ MODE_CONFIG = {
 }
 
 MODE_ORDER = ["short", "deep", "scholar"]
+
+# Persona configuration
+PERSONA_CONFIG = {
+    "default": (
+        "You are the OpenAdonAI Oracle.\n"
+        "- Answer clearly, helpfully, and precisely.\n"
+        "- Stay strictly grounded in the provided context."
+    ),
+    "scholar": (
+        "You are the OpenAdonAI Oracle in SCHOLAR mode.\n"
+        "- Prioritize clarity, structure, and textual precision.\n"
+        "- Anchor interpretations in scripture, Hermetic/Kabbalistic pattern, and careful reasoning.\n"
+        "- Use headings and layered exposition when appropriate.\n"
+        "- Stay strictly grounded in the provided context."
+    ),
+    "mystic": (
+        "You are the OpenAdonAI Oracle in MYSTIC mode.\n"
+        "- Emphasize visionary, Melchizedek, and cosmic pattern insight.\n"
+        "- Preserve metaphors and symbolic correspondences while remaining coherent and grounded.\n"
+        "- Stay strictly grounded in the provided context; do not invent lore beyond it."
+    ),
+    "engineer": (
+        "You are the OpenAdonAI Oracle in ENGINEER mode.\n"
+        "- Focus on code, architecture, infrastructure, and practical implementation details.\n"
+        "- Be precise, stepwise, and explicit.\n"
+        "- Stay strictly grounded in the provided context."
+    ),
+}
 
 # -------- Env-based defaults --------
 
@@ -82,10 +107,17 @@ def fetch_context(query: str, top_k: int = 5):
     return results, context
 
 
-def build_prompt(query: str, obsidian_context: str, mode: str, book_context: str = "") -> str:
+def build_prompt(
+    query: str,
+    obsidian_context: str,
+    mode: str,
+    persona: str = "default",
+    book_context: str = "",
+) -> str:
     """
     Build the final Oracle prompt with:
-      - Obsidian Vault context (mandatory if present)
+      - Persona preamble
+      - Obsidian Vault context (if present)
       - Embedded Book Library context (AnythingLLM), if provided
     """
     mode_cfg = MODE_CONFIG.get(mode, MODE_CONFIG["deep"])
@@ -108,17 +140,21 @@ def build_prompt(query: str, obsidian_context: str, mode: str, book_context: str
     else:
         combined_context = ""
 
+    persona_key = persona if persona in PERSONA_CONFIG else "default"
+    persona_text = PERSONA_CONFIG[persona_key]
+
     return f"""
-You are the OpenAdonAI Oracle.
+{persona_text}
 
 You have access to two knowledge sources:
 1. Obsidian Vault – Ishmael's scrolls, notes, volt systems, and development logs.
-2. Embedded Book Library – PDF books indexed via AnythingLLM.
+2. Embedded Book Library – PDF/Text books indexed via AnythingLLM.
 
 Use ONLY the provided context below to answer the question.
 If the context does not contain the answer, say so. Do not invent unrelated information.
 
 Answer style mode: {mode.upper()}
+Persona: {persona_key}
 Guidance: {style_hint}
 
 ======== BEGIN CONTEXT ========
@@ -265,6 +301,31 @@ def parse_args():
     )
 
     parser.add_argument(
+        "--source-mode",
+        choices=["blend", "obsidian", "books"],
+        default="blend",
+        help=(
+            "Where to pull context from:\n"
+            "  blend    → Obsidian + Books (default)\n"
+            "  obsidian → Obsidian vault only (ignore AnythingLLM)\n"
+            "  books    → Books workspace only (ignore Obsidian)\n"
+        ),
+    )
+
+    parser.add_argument(
+        "--persona",
+        choices=["default", "scholar", "mystic", "engineer"],
+        default="default",
+        help=(
+            "Persona flavor for the Oracle's voice:\n"
+            "  default  → neutral, clear, balanced.\n"
+            "  scholar  → structured, academic, scriptural/Hermetic mapping.\n"
+            "  mystic   → visionary, Melchizedek / cosmic pattern tone.\n"
+            "  engineer → technical, code/infra/practical implementation focus.\n"
+        ),
+    )
+
+    parser.add_argument(
         "--no-chunks",
         action="store_true",
         help="Do not print the list of top matched chunks (quieter console output).",
@@ -275,9 +336,9 @@ def parse_args():
         action="store_true",
         help=(
             "Emit machine-readable JSON instead of pretty console output.\n"
-            "JSON includes: success, mode_used, top_k, prompt, answer, results,\n"
+            "JSON includes: success, mode_used, persona, top_k, prompt, answer, results,\n"
             "               error, book_context_used, obsidian_chunk_count,\n"
-            "               book_snippet_count, book_sources."
+            "               book_snippet_count, book_sources, source_mode."
         ),
     )
 
@@ -312,19 +373,22 @@ def run_oracle_round(
     top_k_arg,
     print_chunks,
     include_books,
+    source_mode,
+    persona,
 ):
     """
     Returns dict:
       {
-        success, mode_used, top_k, prompt, answer,
+        success, mode_used, persona, top_k, prompt, answer,
         results, error, book_context_used,
         obsidian_chunk_count, book_snippet_count,
-        book_sources
+        book_sources, source_mode
       }
     """
     output = {
         "success": False,
         "mode_used": mode,
+        "persona": persona,
         "top_k": None,
         "prompt": "",
         "answer": "",
@@ -334,6 +398,7 @@ def run_oracle_round(
         "obsidian_chunk_count": 0,
         "book_snippet_count": 0,
         "book_sources": [],
+        "source_mode": source_mode,
     }
 
     # Decide top_k: CLI > env default > mode default
@@ -348,21 +413,30 @@ def run_oracle_round(
 
     output["top_k"] = top_k
 
-    # 1) Obsidian context via Oracle RAG
-    try:
-        results, obsidian_context = fetch_context(query, top_k)
-        output["results"] = results
-        output["obsidian_chunk_count"] = len(results)
-    except Exception as e:
-        output["error"] = f"Error fetching context: {e}"
-        return output
+    obsidian_context = ""
+    results = []
 
-    if print_chunks:
+    # 1) Obsidian context via Oracle RAG (only if source_mode requires it)
+    if source_mode in ("blend", "obsidian"):
+        try:
+            results, obsidian_context = fetch_context(query, top_k)
+            output["results"] = results
+            output["obsidian_chunk_count"] = len(results)
+        except Exception as e:
+            # For obsidian-only, this is fatal; for blend, we can still continue with books.
+            if source_mode == "obsidian":
+                output["error"] = f"Error fetching Obsidian context: {e}"
+                return output
+            else:
+                sys.stderr.write(f"⚠️  Error fetching Obsidian context (blend mode): {e}\n")
+                sys.stderr.flush()
+
+    if print_chunks and results:
         pretty_print_results(results)
 
     # 2) Embedded book context via AnythingLLM (optional)
     book_context = ""
-    if include_books and is_anythingllm_enabled():
+    if include_books and source_mode in ("blend", "books") and is_anythingllm_enabled():
         try:
             book_result = query_anythingllm_books(query, max_snippets=5)
             book_context = (book_result.get("context") or "").strip()
@@ -376,17 +450,30 @@ def run_oracle_round(
                 snippet_count = sum(1 for p in parts if p.lstrip().startswith("["))
                 output["book_snippet_count"] = snippet_count if snippet_count > 0 else len(book_sources) or 1
         except Exception as e:
-            # Non-fatal: we just log to stderr and proceed with Obsidian only
-            sys.stderr.write(f"⚠️  Error querying AnythingLLM books: {e}\n")
-            sys.stderr.flush()
+            # For books-only mode, this is fatal; for blend, just warn.
+            if source_mode == "books":
+                output["error"] = f"Error querying AnythingLLM books: {e}"
+                return output
+            else:
+                sys.stderr.write(f"⚠️  Error querying AnythingLLM books (blend mode): {e}\n")
+                sys.stderr.flush()
 
     # 3) Build prompt
-    prompt = build_prompt(query, obsidian_context, mode, book_context=book_context)
+    prompt = build_prompt(
+        query=query,
+        obsidian_context=obsidian_context,
+        mode=mode,
+        persona=persona,
+        book_context=book_context,
+    )
     output["prompt"] = prompt
 
     if backend == "none":
-        # When backend is none, we still mark success if we got context.
-        output["success"] = True
+        # When backend is none, we still mark success if we got *some* context.
+        if obsidian_context or book_context:
+            output["success"] = True
+        else:
+            output["error"] = "No context available from selected sources."
         return output
 
     # 4) Call LLM backend
@@ -411,12 +498,16 @@ def main():
     backend = args.backend
     top_k_arg = args.top_k
     print_chunks = not args.no_chunks
+    source_mode = args.source_mode
+    persona = args.persona
 
     tried = set()
 
     while True:
         # Resolve whether to include book context for *this* mode:
-        # Priority: CLI flags > scholar default > env > false
+        # Priority: source-mode > CLI flags > scholar default > env > false
+
+        # Start from CLI flags
         if args.no_books:
             include_books = False
         elif args.include_books:
@@ -431,11 +522,19 @@ def main():
                 # unless env explicitly set OPENADONAI_INCLUDE_BOOKS=true
                 include_books = INCLUDE_BOOKS_ENV
 
+        # Override based on source_mode
+        if source_mode == "obsidian":
+            include_books = False
+        elif source_mode == "books":
+            include_books = True
+
         if current_mode in tried:
             if args.json:
                 print(json.dumps({
                     "success": False,
                     "error": f"Mode '{current_mode}' failed multiple times.",
+                    "source_mode": source_mode,
+                    "persona": persona,
                 }, indent=2))
             else:
                 print(f"❌ Mode '{current_mode}' failed multiple times.")
@@ -450,17 +549,20 @@ def main():
             top_k_arg=top_k_arg,
             print_chunks=print_chunks,
             include_books=include_books,
+            source_mode=source_mode,
+            persona=persona,
         )
 
         if args.json:
-            # augment with mode_used
+            # augment with mode_used & persona
             result["mode_used"] = current_mode
+            result["persona"] = persona
             print(json.dumps(result, indent=2))
             return
 
         # If success → done
         if result["success"]:
-            # Sources-only path: do NOT call LLM or print answer
+            # Sources-only path: do NOT call LLM or print answer beyond preview
             if args.sources_only:
                 print("\n🔎 Oracle Sources Preview")
                 print("-------------------------\n")
@@ -507,13 +609,25 @@ def main():
 
                 # Build source report line
                 if obs_count == 0 and not book_used:
-                    source_line = "Sources used: (none – context appears empty)"
+                    source_line = (
+                        f"Sources used ({result.get('source_mode','blend')}, persona={result.get('persona','default')}): "
+                        "(none – context appears empty)"
+                    )
                 elif obs_count > 0 and not book_used:
-                    source_line = f"Sources used: Obsidian({obs_count} chunks)"
+                    source_line = (
+                        f"Sources used ({result.get('source_mode','blend')}, persona={result.get('persona','default')}): "
+                        f"Obsidian({obs_count} chunks)"
+                    )
                 elif obs_count == 0 and book_used:
-                    source_line = f"Sources used: Books({book_count} snippets)"
+                    source_line = (
+                        f"Sources used ({result.get('source_mode','blend')}, persona={result.get('persona','default')}): "
+                        f"Books({book_count} snippets)"
+                    )
                 else:
-                    source_line = f"Sources used: Obsidian({obs_count} chunks), Books({book_count} snippets)"
+                    source_line = (
+                        f"Sources used ({result.get('source_mode','blend')}, persona={result.get('persona','default')}): "
+                        f"Obsidian({obs_count} chunks), Books({book_count} snippets)"
+                    )
 
                 print(source_line + "\n")
                 print(result["answer"])
