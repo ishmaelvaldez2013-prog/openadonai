@@ -8,6 +8,15 @@ LOG_FILE="$LOG_DIR/oracle.log"
 
 # === HELPERS ===
 
+load_env() {
+  # Export everything from .env into the current shell
+  if [ -f "$ENV_FILE" ]; then
+    set -a
+    source "$ENV_FILE"
+    set +a
+  fi
+}
+
 activate_venv() {
   if [ -f "$RAG_DIR/.venv/bin/activate" ]; then
     source "$RAG_DIR/.venv/bin/activate"
@@ -15,6 +24,8 @@ activate_venv() {
 }
 
 load_model_name() {
+  # Ensure .env is loaded before reading vars
+  load_env
   # Prefer live env, then .env
   if [ -n "$OLLAMA_CHAT_MODEL" ]; then
     ORACLE_MODEL="$OLLAMA_CHAT_MODEL"
@@ -26,6 +37,8 @@ load_model_name() {
 }
 
 load_default_mode() {
+  # Ensure .env is loaded before reading vars
+  load_env
   # Prefer live env, then .env
   if [ -n "$OPENADONAI_DEFAULT_MODE" ]; then
     ORACLE_DEFAULT_MODE="$OPENADONAI_DEFAULT_MODE"
@@ -37,6 +50,8 @@ load_default_mode() {
 }
 
 load_default_backend() {
+  # Ensure .env is loaded before reading vars
+  load_env
   # Prefer live env, then .env
   if [ -n "$OPENADONAI_DEFAULT_BACKEND" ]; then
     ORACLE_DEFAULT_BACKEND="$OPENADONAI_DEFAULT_BACKEND"
@@ -458,6 +473,10 @@ Oracle:"
 }
 
 # === MAIN DISPATCH ===
+
+# Always load .env and activate venv once at startup
+load_env
+activate_venv
 
 if [ $# -eq 0 ]; then
   print_help
