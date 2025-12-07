@@ -18,11 +18,12 @@ except ImportError:
         return False
 
     def query_anythingllm_books(question: str, max_snippets: int = 5):
-        return {"text": "", "context": ""}
+        return {"text": "", "context": "", "sources": []}
+
 
 ORACLE_URL = os.getenv("ORACLE_URL", "http://localhost:9000/search")
 
-# Env toggle for including book context by default
+# Env toggle for including book context by default (used as a global override if desired)
 INCLUDE_BOOKS_ENV = os.getenv("OPENADONAI_INCLUDE_BOOKS", "false").strip().lower() == "true"
 
 # Mode configuration
@@ -210,7 +211,7 @@ def parse_args():
             "  OPENADONAI_DEFAULT_MODE        → default mode (short|deep|scholar)\n"
             "  OPENADONAI_DEFAULT_BACKEND     → default backend (none|ollama|openai)\n"
             "  OPENADONAI_DEFAULT_TOP_K       → default top_k (int > 0)\n"
-            "  OPENADONAI_INCLUDE_BOOKS       → 'true' to include book context by default\n"
+            "  OPENADONAI_INCLUDE_BOOKS       → 'true' to globally include book context by default\n"
         ),
         formatter_class=argparse.RawTextHelpFormatter,
     )
@@ -230,7 +231,10 @@ def parse_args():
             "  short   → ~3 chunks, concise, high-level summary\n"
             "  deep    → ~7 chunks, structured & detailed (default)\n"
             "  scholar → ~12 chunks, in-depth, scholarly exposition\n"
-            f"\nDefault: {DEFAULT_MODE!r} (can override via OPENADONAI_DEFAULT_MODE)"
+            "\nDefaults:\n"
+            "  • OPENADONAI_DEFAULT_MODE sets global default.\n"
+            "  • scholar mode will include book context by default (if available),\n"
+            "    while short/deep use Obsidian-only by default."
         ),
     )
 
@@ -271,31 +275,51 @@ def parse_args():
         action="store_true",
         help=(
             "Emit machine-readable JSON instead of pretty console output.\n"
-            "JSON includes: success, mode_used, top_k, prompt, answer, results, error, book_context_used."
+            "JSON includes: success, mode_used, top_k, prompt, answer, results,\n"
+            "               error, book_context_used, obsidian_chunk_count,\n"
+            "               book_snippet_count, book_sources."
         ),
     )
 
     parser.add_argument(
         "--include-books",
         action="store_true",
-        help="Also pull RAG context from AnythingLLM embedded book workspace for this query.",
+        help="Force-enable fetching book context from AnythingLLM for this query.",
     )
 
     parser.add_argument(
         "--no-books",
         action="store_true",
-        help="Force-disable book context even if OPENADONAI_INCLUDE_BOOKS=true.",
+        help="Force-disable book context for this query, even if scholar or env says true.",
+    )
+
+    parser.add_argument(
+        "--sources-only",
+        action="store_true",
+        help=(
+            "Show which sources (Obsidian chunks + book snippets) would be used,\n"
+            "without calling the LLM backend. Useful with 'oracle sources'."
+        ),
     )
 
     return parser.parse_args()
 
 
-def run_oracle_round(query, mode, backend, top_k_arg, print_chunks, include_books):
+def run_oracle_round(
+    query,
+    mode,
+    backend,
+    top_k_arg,
+    print_chunks,
+    include_books,
+):
     """
     Returns dict:
       {
         success, mode_used, top_k, prompt, answer,
-        results, error, book_context_used
+        results, error, book_context_used,
+        obsidian_chunk_count, book_snippet_count,
+        book_sources
       }
     """
     output = {
@@ -307,6 +331,9 @@ def run_oracle_round(query, mode, backend, top_k_arg, print_chunks, include_book
         "results": [],
         "error": "",
         "book_context_used": False,
+        "obsidian_chunk_count": 0,
+        "book_snippet_count": 0,
+        "book_sources": [],
     }
 
     # Decide top_k: CLI > env default > mode default
@@ -325,6 +352,7 @@ def run_oracle_round(query, mode, backend, top_k_arg, print_chunks, include_book
     try:
         results, obsidian_context = fetch_context(query, top_k)
         output["results"] = results
+        output["obsidian_chunk_count"] = len(results)
     except Exception as e:
         output["error"] = f"Error fetching context: {e}"
         return output
@@ -338,8 +366,15 @@ def run_oracle_round(query, mode, backend, top_k_arg, print_chunks, include_book
         try:
             book_result = query_anythingllm_books(query, max_snippets=5)
             book_context = (book_result.get("context") or "").strip()
+            book_sources = book_result.get("sources") or []
+            output["book_sources"] = book_sources
+
             if book_context:
                 output["book_context_used"] = True
+                # Rough heuristic: each snippet starts with "[" and is separated by blank lines
+                parts = [p for p in book_context.split("\n\n") if p.strip()]
+                snippet_count = sum(1 for p in parts if p.lstrip().startswith("["))
+                output["book_snippet_count"] = snippet_count if snippet_count > 0 else len(book_sources) or 1
         except Exception as e:
             # Non-fatal: we just log to stderr and proceed with Obsidian only
             sys.stderr.write(f"⚠️  Error querying AnythingLLM books: {e}\n")
@@ -350,6 +385,7 @@ def run_oracle_round(query, mode, backend, top_k_arg, print_chunks, include_book
     output["prompt"] = prompt
 
     if backend == "none":
+        # When backend is none, we still mark success if we got context.
         output["success"] = True
         return output
 
@@ -376,19 +412,25 @@ def main():
     top_k_arg = args.top_k
     print_chunks = not args.no_chunks
 
-    # Resolve whether to include book context this run
-    # Priority: CLI flags > env
-    include_books = False
-    if args.no_books:
-        include_books = False
-    elif args.include_books:
-        include_books = True
-    else:
-        include_books = INCLUDE_BOOKS_ENV
-
     tried = set()
 
     while True:
+        # Resolve whether to include book context for *this* mode:
+        # Priority: CLI flags > scholar default > env > false
+        if args.no_books:
+            include_books = False
+        elif args.include_books:
+            include_books = True
+        else:
+            # No explicit CLI override
+            if current_mode == "scholar":
+                # Scholar mode always includes books by default if available
+                include_books = True
+            else:
+                # short/deep stick to Obsidian-only by default,
+                # unless env explicitly set OPENADONAI_INCLUDE_BOOKS=true
+                include_books = INCLUDE_BOOKS_ENV
+
         if current_mode in tried:
             if args.json:
                 print(json.dumps({
@@ -418,10 +460,62 @@ def main():
 
         # If success → done
         if result["success"]:
+            # Sources-only path: do NOT call LLM or print answer
+            if args.sources_only:
+                print("\n🔎 Oracle Sources Preview")
+                print("-------------------------\n")
+
+                obs_results = result.get("results", []) or []
+                print(f"Obsidian chunks: {len(obs_results)}")
+                if obs_results:
+                    for r in obs_results:
+                        fp = r.get("file_path", "?")
+                        idx = r.get("chunk_index", 0)
+                        score = r.get("score", 0.0)
+                        print(f"  - {fp} (chunk {idx}, score {score:.4f})")
+                else:
+                    print("  (none)")
+
+                book_used = result.get("book_context_used", False)
+                book_sources = result.get("book_sources", []) or []
+
+                if book_used and book_sources:
+                    print(f"\nBooks snippets: {len(book_sources)}")
+                    for s in book_sources:
+                        title = s.get("title") or s.get("filename") or "Unknown"
+                        page = s.get("page") or s.get("pageNumber")
+                        source_id = s.get("source") or ""
+                        line = f"  - {title}"
+                        if page:
+                            line += f", p.{page}"
+                        if source_id:
+                            line += f" [{source_id}]"
+                        print(line)
+                else:
+                    print("\nBooks snippets: (none)")
+
+                print("")
+                return
+
+            # Normal answer path
             if result["answer"]:
                 print("\n================= ORACLE ANSWER =================\n")
-                if result.get("book_context_used"):
-                    print("(📚 Book context used from AnythingLLM)\n")
+
+                obs_count = result.get("obsidian_chunk_count", 0)
+                book_used = result.get("book_context_used", False)
+                book_count = result.get("book_snippet_count", 0) if book_used else 0
+
+                # Build source report line
+                if obs_count == 0 and not book_used:
+                    source_line = "Sources used: (none – context appears empty)"
+                elif obs_count > 0 and not book_used:
+                    source_line = f"Sources used: Obsidian({obs_count} chunks)"
+                elif obs_count == 0 and book_used:
+                    source_line = f"Sources used: Books({book_count} snippets)"
+                else:
+                    source_line = f"Sources used: Obsidian({obs_count} chunks), Books({book_count} snippets)"
+
+                print(source_line + "\n")
                 print(result["answer"])
                 print("\n=================================================\n")
             return
